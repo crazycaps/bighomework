@@ -291,15 +291,14 @@ def load(stat, storage):
                                    pathmark=stat['now']['me']['id'])  # 敌人纸卷到我目前纸带的最短距离
                 null, disHe2MeBack = find_path(stat, operate='enemy_to_path', pathstat=HomeTrack, pathmark='t')
                 if disHe2MeBack>=(stat['size'][0]+stat['size'][1]-1):
-                    print("No path for he to my home track!")
+                    # print("No path for he to my home track!")
                     return back_home(my_x, my_y, stat)
                 if disMe2Home < disHe2Me - 3 and disMe2Home < disHe2MeBack-4:
-                    print("Next track!")
+                    # print("Next track!")
                     return getRelativeDirection(my_x, my_y, nextX, nextY,stat['now']['me']['direction'])
                 else:
-                    print("Next Track not safe!")
+                    # print("Next Track not safe!")
                     return back_home(my_x, my_y, stat)
-
 
         elif stat['now']['fields'][my_x][my_y] == stat['now']['me']['id']:
             storage['switch'] = False
@@ -313,7 +312,7 @@ def load(stat, storage):
                         0 <= my_x - 1 < stat['size'][0] and 0 <= my_y < stat['size'][1] and
                         stat['now']['fields'][my_x - 1][my_y] == stat['now']['me']['id']):
                 d = evaluate_d(stat)
-                print("\n\n\nd is{}\n\n\m ".format(d))
+                # print("\n\n\nd is{}\n\n\m ".format(d))
                 set_track(d, stat['now']['me']['id'], stat['now']['fields'])
                 storage['d_count'] = 3 * d
                 #print("set track in {} ".format(stat['now']['turnleft'][0]))
@@ -322,7 +321,7 @@ def load(stat, storage):
             else:
                 tmp=back_track(my_x, my_y, stat)
             if tmp:
-                print("from field to track in {}".format(stat['now']['turnleft'][0]))
+                # print("from field to track in {}".format(stat['now']['turnleft'][0]))
                 return tmp
             else:
                 print("battle in {}".format(stat['now']['turnleft'][0]))
@@ -387,15 +386,15 @@ def load(stat, storage):
                     count -= 1
         else:
             if storage['switch'] == True:
-                print("force to home in {}".format(stat['now']['turnleft'][0]))
+                # print("force to home in {}".format(stat['now']['turnleft'][0]))
                 return back_home(my_x, my_y, stat)
             else:
                 dirc = back_track(my_x, my_y, stat)
                 if dirc:
-                    print('from none to track in {}'.format(stat['now']['turnleft'][0]))
+                    # print('from none to track in {}'.format(stat['now']['turnleft'][0]))
                     return dirc
                 else:
-                    print("not safe from none to filed in {}".format(stat['now']['turnleft'][0]))
+                    # print("not safe from none to filed in {}".format(stat['now']['turnleft'][0]))
                     return back_home(my_x, my_y, stat)
 
     def choiceDirection(myX, myY, path, storage):
@@ -424,52 +423,31 @@ def load(stat, storage):
     def isOnTrack(x, y, path):
         return path is not None and 0 <= x < stat['size'][0] and 0 <= y < stat['size'][1] and path[x][y] == 't'
 
-    def isNowSafe(stat=stat, storage=storage):
-        BackTrack, disMe2Home = find_path(stat, operate='me_to_home', outputmark='t')  # 当前位置我纸卷到领地的最短距离
-        myid = stat['now']['me']['id']
-        null, disHe2Me = find_path(stat, operate='enemy_to_path', pathstat=stat['now']['bands'],
-                                   pathmark=myid)  # 敌人纸卷到我目前纸带的最短距离
-        null, disHe2MeBack = find_path(stat, operate='enemy_to_path', pathstat=BackTrack, pathmark='t')
-        if disHe2Me >= (stat['size'][0] + stat['size'][1] - 1):
-            return False
-        if disMe2Home < disHe2Me - 4 and disMe2Home < disHe2MeBack-4:
-            return True
-        else:
-            return False
-
     def isNextStepSafe(stat=stat, storage=storage, nextX=None, nextY=None):
         BackTrack, disMe2Home = find_path(stat, operate='site_to_home', myx=nextX, myy=nextY,
                                           outputmark='t')  # 当前位置我纸卷到领地的最短距离
         if disMe2Home==0:
-            print("next point in field")
+            # print("next point in field")
             return True
-        '''
-
-        '''
         if disMe2Home >= (stat['size'][0] + stat['size'][1] - 1):
             storage['switch'] = True
-            print("No path to home")
+            # print("No path to home")
             return False
 
         myid = stat['now']['me']['id']
         null, disHe2Me = find_path(stat, operate='enemy_to_path', pathstat=stat['now']['bands'],pathmark=myid)  # 敌人纸卷到我目前纸带的最短距离
         if disHe2Me >= (stat['size'][0] + stat['size'][1] - 1):
             if disMe2Home>((abs(nextX-stat['now']['enemy']['x'])+abs(nextY-stat['now']['enemy']['y']))-4):
-                print("No path for he 2 me! and distance not safe")
+                # print("No path for he 2 me! and distance not safe")
                 return False
             else:
                 return True     
         null, disHe2MeBack = find_path(stat, operate='enemy_to_path', pathstat=BackTrack, pathmark='t')
-        '''
-        if disHe2MeBack >= (stat['size'][0] + stat['size'][1] - 1):
-            print("NO path for he 2 me Back")
-            return False
-        '''
         if disMe2Home < disHe2Me - 4 and disMe2Home < disHe2MeBack-5:
-            print("safe!")
+            # print("safe!")
             return True
         else:
-            print("distance not safe")
+            # print("distance not safe")
             return False
 
     # 找到路径上下一个位置的函数
@@ -885,11 +863,9 @@ def load(stat, storage):
     storage['attack'] = attack
     storage['evaluate_d'] = evaluate_d
     storage['isOnTrack'] = isOnTrack
-    storage['isNowSafe'] = isNowSafe
     storage['isNextStepSafe'] = isNextStepSafe
     storage['getNextPosition'] = getNextPosition
     storage['getRelativeDirection'] = getRelativeDirection
     storage['back_track'] = back_track
     storage['back_home'] = back_home
     storage['beginning'] = beginning
-    storage['choiceDirection'] = choiceDirection
