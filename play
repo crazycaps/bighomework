@@ -1,54 +1,53 @@
 def play(stat, storage):
-    # print('in %d' % (stat['now']['turnleft'][stat['now']['me']['id'] - 1]))
+    print('in %d' % (stat['now']['turnleft'][stat['now']['me']['id'] - 1]))
     myX, myY = stat['now']['me']['x'], stat['now']['me']['y']
     direction = stat['now']['me']['direction']
 
     if storage['to_start']:
         # 调用秦晓宇的函数，生成路径
         return storage['beginning'](stat, storage)
-    if storage['d_count'] < 0:
-        storage['switch'] = True
+    if storage['d_count']<0:
+        storage['switch']=True
     else:
-        storage['d_count'] -= 1
-    # print(storage['d_count'])
+        storage['d_count']-=1
+    #print(storage['d_count'])
     storage['attack'](stat)
     if storage['to_attack']:
-        storage['AttackTrack'][myX][myY] = 0
+        storage['AttackTrack'][myX][myY]=0
         nextX, nextY = storage['getNextPosition'](myX, myY, storage['AttackTrack'])
-
+        
         tmp = storage['getRelativeDirection'](myX, myY, nextX, nextY, direction)
+        #print('attack:tmp=%s'%tmp)
     else:
         tmp = storage['is_safe'](stat, storage)
-    dir_list = [(myX - 1, myY), (myX, myY - 1), (myX + 1, myY), (myX, myY + 1)]
-    dir_list.pop(direction)
-    # print(tmp)
+        #print(' not attack:tmp=%s'%tmp)
+    dir_list = ['left', 'right', 'straight']
+    if tmp not in dir_list:
+        tmp = 'straight'
     while len(dir_list) > 1:
-        _x, _y = tmp[0], tmp[1]
-        if 0 <= _x < stat['size'][0] and 0 <= _y < stat['size'][1] and stat['now']['bands'][_x][_y] != \
-                stat['now']['me']['id']:
+        if tmp == 'left':
+            direction -= 1
+        elif tmp == 'right':
+            direction += 1
+        if direction == 0 or direction == 4:
+            myX += 1
+        elif direction == 1:
+            myY += 1
+        elif direction == 2:
+            myX -= 1
+        else:
+            myY -= 1
+        if 0 <= myX < stat['size'][0] and 0 <= myY < stat['size'][1] and stat['now']['bands'][myX][myY] != \
+                stat['now']['me'][
+                    'id']:
             # print('mx,my=%d,%d'%(myX,myY))
-            break
+            return tmp
         else:
             dir_list.pop(dir_list.index(tmp))
             tmp = dir_list[0]
     # print('mx,my=%d,%d' % (myX, myY))
-    if tmp == (myX - 1, myY):
-        relative = 2 - direction
-    elif tmp == (myX, myY - 1):
-        relative = 3 - direction
-    elif tmp == (myX + 1, myY):
-        relative = - direction
-    else:
-        relative = 1 - direction
-    # print(tmp)
-    if relative == 0:
-        return 'straight'
-    elif relative == -1 or relative == 3:
-        return 'left'
-    elif relative == 1 or relative == -3:
-        return 'right'
-    else:
-        raise TypeError
+    return dir_list[0]
+
 
 def load(stat, storage):
     # 变量初始化区域：
@@ -103,7 +102,7 @@ def load(stat, storage):
             # 确定长和宽
             length = c // 4
             width = min(c // 2 - length,stat['now']['me']['x']-1,stat['size'][0]-stat['now']['me']['x']-1)
-            storage['move_list'] = [length -1, width, length, width - 2]
+            storage['move_list'] = [length + 1, width, length + 2, width - 2]
             if (storage['begin_dir'] == 'up' and int(storage['begin_x']) < 50) or (
                     storage['begin_dir'] == 'down' and int(storage['begin_x']) > 50):
                 storage['turner'] = 'left'
@@ -246,10 +245,78 @@ def load(stat, storage):
         my_y = stat['now']['me']['y']
         # track_tag='t'
         isOnTrack = storage['isOnTrack']
+        isNextStepSafe = storage['isNextStepSafe']
+        # getNextPosition=storage['getNextPosition']
         getRelativeDirection = storage['getRelativeDirection']
         back_track = storage['back_track']
         back_home = storage['back_home']
         RoundTrack = storage['track']
+        '''
+        if False and stat['now']['fields'][my_x][my_y]==stat['now']['me']['id'] and (abs(stat['now']['me']['x'] - stat['now']['enemy']['x']) + abs(
+                stat['now']['me']['y'] - stat['now']['enemy']['y']) < 6):
+            d = evaluate_d(stat)
+            set_track(d, stat['now']['me']['id'], stat['now']['fields'])
+            print('battle')
+            if my_x==0:
+                move_dict={1: abs(my_x - stat['now']['enemy']['x']) + abs(my_y - 1 - stat['now']['enemy']['y']),
+                         2: abs(my_x + 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         3: abs(my_x - stat['now']['enemy']['x']) + abs(my_y + 1 - stat['now']['enemy']['y'])}
+            elif my_x==stat['size'][0]-1:
+                move_dict={0: abs(my_x - 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         1: abs(my_x - stat['now']['enemy']['x']) + abs(my_y - 1 - stat['now']['enemy']['y']),
+                         3: abs(my_x - stat['now']['enemy']['x']) + abs(my_y + 1 - stat['now']['enemy']['y'])}
+            elif my_y==0:
+                move_dict={0: abs(my_x - 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         2: abs(my_x + 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         3: abs(my_x - stat['now']['enemy']['x']) + abs(my_y + 1 - stat['now']['enemy']['y'])}
+            elif my_y==stat['size'][1]-1:
+                move_dict={0: abs(my_x - 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         1: abs(my_x - stat['now']['enemy']['x']) + abs(my_y - 1 - stat['now']['enemy']['y']),
+                         2: abs(my_x + 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),}
+            else:
+                move_dict = {0: abs(my_x - 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         1: abs(my_x - stat['now']['enemy']['x']) + abs(my_y - 1 - stat['now']['enemy']['y']),
+                         2: abs(my_x + 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         3: abs(my_x - stat['now']['enemy']['x']) + abs(my_y + 1 - stat['now']['enemy']['y'])}
+            if stat['now']['me']['direction'] in move_dict:
+                move_dict.pop(stat['now']['me']['direction'])
+            # print('pop')
+            count = 3
+            while count > 0:
+                # print('count=%d'%count)
+                v_m, k_m = -1, 0
+                for i in move_dict.keys():
+                    if move_dict[i] > v_m:
+                        k_m = i
+                # print('km=%d' % k_m)
+                if k_m == 0 and (stat['now']['fields'][my_x - 1][my_y] == stat['now']['me']['id'] or count == 1):
+                    _dir = stat['now']['me']['direction'] - 2
+                    if _dir == 1:
+                        return 'left'
+                    elif _dir == -1:
+                        return 'right'
+                elif k_m == 1 and (stat['now']['fields'][my_x][my_y - 1] == stat['now']['me']['id'] or count == 1):
+                    _dir = stat['now']['me']['direction'] - 3
+                    if _dir == -3:
+                        return 'left'
+                    elif _dir == -1:
+                        return 'right'
+                elif k_m == 2 and (stat['now']['fields'][my_x + 1][my_y] == stat['now']['me']['id'] or count == 1):
+                    _dir = stat['now']['me']['direction']
+                    if _dir == 1:
+                        return 'left'
+                    elif _dir == 3:
+                        return 'right'
+                elif k_m == 3 and (stat['now']['fields'][my_x][my_y + 1] == stat['now']['me']['id'] or count == 1):
+                    _dir = stat['now']['me']['direction'] - 1
+                    if _dir == 1:
+                        return 'left'
+                    elif _dir == -1:
+                        return 'right'
+                # print('pop %d' % k_m)
+                move_dict.pop(k_m)
+                count -= 1
+        '''
         if isOnTrack(my_x, my_y, RoundTrack):
             #print('on track in {}'.format(stat['now']['turnleft'][0]))
             RoundTrack[my_x][my_y] = 0
@@ -278,31 +345,32 @@ def load(stat, storage):
 
             if nextX is False:
                 storage['switch'] = True
-                # print("No Track")
+                print("No Track")
                 return back_home(my_x, my_y, stat)
             else:
                 #print("chose one way in {}".format(stat['now']['turnleft'][0]))
                 HomeTrack, disMe2Home = find_path(stat, operate='site_to_home', myx=nextX,myy=nextY,outputmark='t')
                 if disMe2Home>=(stat['size'][0]+stat['size'][1]-1):
                     storage['switch']=True
-                    # print("No way to home!")
+                    print("No way to home!")
                     return back_home(my_x, my_y, stat)
                 null, disHe2Me = find_path(stat, operate='enemy_to_path', pathstat=stat['now']['bands'],
                                    pathmark=stat['now']['me']['id'])  # 敌人纸卷到我目前纸带的最短距离
                 null, disHe2MeBack = find_path(stat, operate='enemy_to_path', pathstat=HomeTrack, pathmark='t')
                 if disHe2MeBack>=(stat['size'][0]+stat['size'][1]-1):
-                    # print("No path for he to my home track!")
+                    print("No path for he to my home track!")
                     return back_home(my_x, my_y, stat)
                 if disMe2Home < disHe2Me - 3 and disMe2Home < disHe2MeBack-4:
-                    # print("Next track!")
+                    print("Next track!")
                     return getRelativeDirection(my_x, my_y, nextX, nextY,stat['now']['me']['direction'])
                 else:
-                    # print("Next Track not safe!")
+                    print("Next Track not safe!")
                     return back_home(my_x, my_y, stat)
+
 
         elif stat['now']['fields'][my_x][my_y] == stat['now']['me']['id']:
             storage['switch'] = False
-            # print("in my field in {}".format(stat['now']['turnleft'][0]))
+            print("in my field in {}".format(stat['now']['turnleft'][0]))
             if not (0 <= my_x < stat['size'][0] and 0 <= my_y - 1 < stat['size'][1] and stat['now']['fields'][my_x][
                     my_y - 1] == stat['now']['me']['id'] and
                         0 <= my_x + 1 < stat['size'][0] and 0 <= my_y < stat['size'][1] and
@@ -312,16 +380,16 @@ def load(stat, storage):
                         0 <= my_x - 1 < stat['size'][0] and 0 <= my_y < stat['size'][1] and
                         stat['now']['fields'][my_x - 1][my_y] == stat['now']['me']['id']):
                 d = evaluate_d(stat)
-                # print("\n\n\nd is{}\n\n\m ".format(d))
+                print("\n\n\nd is{}\n\n\m ".format(d))
                 set_track(d, stat['now']['me']['id'], stat['now']['fields'])
-                storage['d_count'] = 3 * d
+                storage['d_count'] = 5 * d
                 #print("set track in {} ".format(stat['now']['turnleft'][0]))
-            if abs(my_x-stat['now']['enemy']['x'])+abs(stat['now']['enemy']['y']-my_y)<7:
+            if abs(my_x-stat['now']['enemy']['x'])+abs(stat['now']['enemy']['y']-my_y)<5:
                 tmp=False
             else:
                 tmp=back_track(my_x, my_y, stat)
             if tmp:
-                # print("from field to track in {}".format(stat['now']['turnleft'][0]))
+                print("from field to track in {}".format(stat['now']['turnleft'][0]))
                 return tmp
             else:
                 print("battle in {}".format(stat['now']['turnleft'][0]))
@@ -386,15 +454,15 @@ def load(stat, storage):
                     count -= 1
         else:
             if storage['switch'] == True:
-                # print("force to home in {}".format(stat['now']['turnleft'][0]))
+                print("force to home in {}".format(stat['now']['turnleft'][0]))
                 return back_home(my_x, my_y, stat)
             else:
                 dirc = back_track(my_x, my_y, stat)
                 if dirc:
-                    # print('from none to track in {}'.format(stat['now']['turnleft'][0]))
+                    print('from none to track in {}'.format(stat['now']['turnleft'][0]))
                     return dirc
                 else:
-                    # print("not safe from none to filed in {}".format(stat['now']['turnleft'][0]))
+                    print("not safe from none to filed in {}".format(stat['now']['turnleft'][0]))
                     return back_home(my_x, my_y, stat)
 
     def choiceDirection(myX, myY, path, storage):
@@ -423,31 +491,52 @@ def load(stat, storage):
     def isOnTrack(x, y, path):
         return path is not None and 0 <= x < stat['size'][0] and 0 <= y < stat['size'][1] and path[x][y] == 't'
 
+    def isNowSafe(stat=stat, storage=storage):
+        BackTrack, disMe2Home = find_path(stat, operate='me_to_home', outputmark='t')  # 当前位置我纸卷到领地的最短距离
+        myid = stat['now']['me']['id']
+        null, disHe2Me = find_path(stat, operate='enemy_to_path', pathstat=stat['now']['bands'],
+                                   pathmark=myid)  # 敌人纸卷到我目前纸带的最短距离
+        null, disHe2MeBack = find_path(stat, operate='enemy_to_path', pathstat=BackTrack, pathmark='t')
+        if disHe2Me >= (stat['size'][0] + stat['size'][1] - 1):
+            return False
+        if disMe2Home < disHe2Me - 4 and disMe2Home < disHe2MeBack-4:
+            return True
+        else:
+            return False
+
     def isNextStepSafe(stat=stat, storage=storage, nextX=None, nextY=None):
         BackTrack, disMe2Home = find_path(stat, operate='site_to_home', myx=nextX, myy=nextY,
                                           outputmark='t')  # 当前位置我纸卷到领地的最短距离
         if disMe2Home==0:
-            # print("next point in field")
+            print("next point in field")
             return True
+        '''
+
+        '''
         if disMe2Home >= (stat['size'][0] + stat['size'][1] - 1):
             storage['switch'] = True
-            # print("No path to home")
+            print("No path to home")
             return False
 
         myid = stat['now']['me']['id']
         null, disHe2Me = find_path(stat, operate='enemy_to_path', pathstat=stat['now']['bands'],pathmark=myid)  # 敌人纸卷到我目前纸带的最短距离
         if disHe2Me >= (stat['size'][0] + stat['size'][1] - 1):
             if disMe2Home>((abs(nextX-stat['now']['enemy']['x'])+abs(nextY-stat['now']['enemy']['y']))-4):
-                # print("No path for he 2 me! and distance not safe")
+                print("No path for he 2 me! and distance not safe")
                 return False
             else:
                 return True     
         null, disHe2MeBack = find_path(stat, operate='enemy_to_path', pathstat=BackTrack, pathmark='t')
+        '''
+        if disHe2MeBack >= (stat['size'][0] + stat['size'][1] - 1):
+            print("NO path for he 2 me Back")
+            return False
+        '''
         if disMe2Home < disHe2Me - 4 and disMe2Home < disHe2MeBack-5:
-            # print("safe!")
+            print("safe!")
             return True
         else:
-            # print("distance not safe")
+            print("distance not safe")
             return False
 
     # 找到路径上下一个位置的函数
@@ -863,9 +952,11 @@ def load(stat, storage):
     storage['attack'] = attack
     storage['evaluate_d'] = evaluate_d
     storage['isOnTrack'] = isOnTrack
+    storage['isNowSafe'] = isNowSafe
     storage['isNextStepSafe'] = isNextStepSafe
     storage['getNextPosition'] = getNextPosition
     storage['getRelativeDirection'] = getRelativeDirection
     storage['back_track'] = back_track
     storage['back_home'] = back_home
     storage['beginning'] = beginning
+    storage['choiceDirection'] = choiceDirection
