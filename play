@@ -1,0 +1,895 @@
+def play(stat, storage):
+    # print('in %d' % (stat['now']['turnleft'][stat['now']['me']['id'] - 1]))
+    myX, myY = stat['now']['me']['x'], stat['now']['me']['y']
+    direction = stat['now']['me']['direction']
+
+    if storage['to_start']:
+        # 调用秦晓宇的函数，生成路径
+        return storage['beginning'](stat, storage)
+    if storage['d_count'] < 0:
+        storage['switch'] = True
+    else:
+        storage['d_count'] -= 1
+    # print(storage['d_count'])
+    storage['attack'](stat)
+    if storage['to_attack']:
+        storage['AttackTrack'][myX][myY] = 0
+        nextX, nextY = storage['getNextPosition'](myX, myY, storage['AttackTrack'])
+
+        tmp = storage['getRelativeDirection'](myX, myY, nextX, nextY, direction)
+    else:
+        tmp = storage['is_safe'](stat, storage)
+    dir_list = [(myX - 1, myY), (myX, myY - 1), (myX + 1, myY), (myX, myY + 1)]
+    dir_list.pop(direction)
+    # print(tmp)
+    while len(dir_list) > 1:
+        _x, _y = tmp[0], tmp[1]
+        if 0 <= _x < stat['size'][0] and 0 <= _y < stat['size'][1] and stat['now']['bands'][_x][_y] != \
+                stat['now']['me']['id']:
+            # print('mx,my=%d,%d'%(myX,myY))
+            break
+        else:
+            dir_list.pop(dir_list.index(tmp))
+            tmp = dir_list[0]
+    # print('mx,my=%d,%d' % (myX, myY))
+    if tmp == (myX - 1, myY):
+        relative = 2 - direction
+    elif tmp == (myX, myY - 1):
+        relative = 3 - direction
+    elif tmp == (myX + 1, myY):
+        relative = - direction
+    else:
+        relative = 1 - direction
+    # print(tmp)
+    if relative == 0:
+        return 'straight'
+    elif relative == -1 or relative == 3:
+        return 'left'
+    elif relative == 1 or relative == -3:
+        return 'right'
+    else:
+        raise TypeError
+
+def load(stat, storage):
+    # 变量初始化区域：
+    storage['switch'] = False
+    storage['to_start'] = True
+    storage['to_attack'] = False
+    storage['firststep'] = True
+    storage['secondstep'] = False
+    storage['begin_dir'] = ''
+    storage['along_track'] = False
+    storage['track']=None
+    storage['d_count']=float('inf')
+
+
+    def beginning(stat, storage):  # 效果与set_track类似
+        '''
+        辅助函数说明：初始圈地函数
+        传入参数：stat,storage
+        传出参数：无
+        version:
+            1.0:    date:2018/6/9   Qin
+        '''
+        # print('beginning')
+        if storage['firststep']:
+            storage['firststep'] = False
+            storage['secondstep'] = True
+            storage['begin_x'] = stat['now']['me']['x']
+            storage['begin_y'] = stat['now']['me']['y']
+            if stat['now']['me']['direction'] == 1:
+                storage['y0'] = stat['now']['me']['y'] + 2
+                storage['begin_dir'] = 'down'
+                return 'straight'
+            if stat['now']['me']['direction'] == 3:
+                storage['y0'] = stat['now']['me']['y'] - 2
+                storage['begin_dir'] = 'up'
+                return 'straight'
+            if stat['now']['me']['direction'] == 0:
+                storage['y0'] = stat['now']['me']['y'] - 2
+                storage['begin_dir'] = 'up'
+                return 'left'
+            if stat['now']['me']['direction'] == 2:
+                storage['begin_dir'] = 'down'
+                storage['y0'] = stat['now']['me']['y'] + 2
+                return 'left'
+
+        if storage['secondstep']:  # 只需在第二步运行一次
+            storage['secondstep'] = False
+            distance = abs(stat['now']['me']['x'] - stat['now']['enemy']['x']) - 1  # 对方到我方的最短距离
+
+            # 确定周长
+            c = (int(distance) // 2) * 2
+            # 确定长和宽
+            length = c // 4
+            width = min(c // 2 - length,stat['now']['me']['x']-1,stat['size'][0]-stat['now']['me']['x']-1)
+            storage['move_list'] = [length -1, width, length, width - 2]
+            if (storage['begin_dir'] == 'up' and int(storage['begin_x']) < 50) or (
+                    storage['begin_dir'] == 'down' and int(storage['begin_x']) > 50):
+                storage['turner'] = 'left'
+            else:
+                storage['turner'] = 'right'
+            storage['count'] = 0
+        if storage['move_list'][storage['count']] > 0:
+            storage['move_list'][storage['count']] -= 1
+            return 'straight'
+        elif storage['count'] < 3:
+            storage['count'] += 1
+            return storage['turner']
+        else:
+            storage['to_start'] = False
+            return 'straight'
+
+    def attack(stat):
+        '''
+        辅助函数说明：攻击函数，用来判断什么时候攻击。当判断需要攻击的时候，将存储在storage中的to_attack关键词赋值为True
+        传入参数：stat
+        传出参数：无
+        version:
+            1.0:    date:2018/6/8   Guo
+        '''
+        col, row = len(stat['now']['fields']), len(stat['now']['fields'][0])
+        me_attack_path, me_attack_distance = find_path(stat, operate='me_to_path', pathstat=stat['now']['bands'],
+                                                       pathmark=stat['now']['enemy']['id'], outputmark='suppose')
+        valid_attack_distance=me_attack_distance
+        if me_attack_distance < col + row:
+            for x in range(col):
+                for y in range(row):
+                    if stat['now']['fields'][x][y] == stat['now']['me']['id']:
+                        if me_attack_path[x][y] == 'suppose':
+                            valid_attack_distance-=1
+                            me_attack_path[x][y] = 'cancel'
+            enemy_home_path, enemy_home_distance = find_path(stat, operate='enemy_to_home')
+            if enemy_home_distance < col + row:
+                if valid_attack_distance == 0 and me_attack_distance < enemy_home_distance:
+                    storage['to_attack'] = True
+                    storage['AttackTrack'], null = storage['find_path'](stat, operate='me_to_path', pathstat=stat['now']['bands'],pathmark=stat['now']['enemy']['id'],outputmark='t')  # 当前到圈地路径的路
+                else:
+                    enemy_me_path, enemy_me_distance = find_path(stat, operate='enemy_to_path', pathstat=me_attack_path,
+                                                             pathmark='suppose')
+                    if enemy_me_distance < col + row:
+                        if me_attack_distance < enemy_home_distance and me_attack_distance < enemy_me_distance:
+                            storage['to_attack'] = True
+                            storage['AttackTrack'], null = storage['find_path'](stat, operate='me_to_path', pathstat=stat['now']['bands'],pathmark=stat['now']['enemy']['id'],outputmark='t')  # 当前到圈地路径的路
+
+    def evaluate_d(stat):
+        '''
+        辅助函数说明：距离d的生成函数
+        传入参数：stat
+        传出参数：
+            d   int d的数值，用来建立圈地路径
+        version:
+            1.0:    date:2018/6/8   Guo
+        '''
+        n = abs(stat['now']['me']['x'] - stat['now']['enemy']['x']) + abs(
+            stat['now']['me']['y'] - stat['now']['enemy']['y'])
+        if n >= 20:
+            return n * 2 // 5
+        elif n >= 12:
+            return n // 3
+        else:
+            return (n-2) // 4
+
+    def set_track(d=2, _id=1, fields=None):
+        '''
+        函数说明：更新圈地路径
+        传入参数：
+            d int 离开领地的距离
+            _id int 我方的编号
+            fields list[list[]] 二维数组，表示双方的领地
+        中间变量：（太多了）
+        返回：
+            不返回值，生成的结果将保存在storage['track']中。结果为一个二维数组，0表示非路径，'t'表示路径
+        Version:
+            2.0: date:2018/6/7  by st   将本函数嵌入play
+        '''
+        # 预处理
+        # print('in %d' % (stat['now']['turnleft'][stat['now']['me']['id'] - 1]))
+        # print('set')
+        col, row, corner_list = len(fields), len(fields[0]), []
+        track = [[0 for y in range(row)] for x in range(col)]  # 路径数组
+        max_x, min_x, max_y, min_y = 0, 0, 0, 0
+        count_x, count_y = 0, 0
+        for x in range(col):
+            for y in range(row):
+                if fields[x][y] == _id and ((y > 0 and fields[x][y - 1] != _id) or y == 0):
+                    min_y += y
+                    count_y += 1
+                    break
+            for y in range(row - 1, -1, -1):
+                if fields[x][y] == _id and ((y < row - 1 and fields[x][y + 1] != _id) or y == row - 1):
+                    max_y += y
+                    break
+        for y in range(row):
+            for x in range(col):
+                if fields[x][y] == _id and ((x > 0 and fields[max(0, x - 1)][y] != _id) or x == 0):
+                    min_x += x
+                    count_x += 1
+                    break
+            for x in range(col - 1, -1, -1):
+                if fields[x][y] == _id and ((x < col - 1 and fields[x + 1][y] != _id) or x == col - 1):
+                    max_x += x
+                    break
+        max_x, min_x = min((max_x // count_x) + d, col - 1), max((min_x // count_x) - d, 0)
+        max_y, min_y = min((max_y // count_y) + d, row - 1), max((min_y // count_y) - d, 0)
+        for x in range(min_x, max_x + 1):
+            if fields[x][max_y] != _id:
+                track[x][max_y] = 't'
+            if fields[x][min_y] != _id:
+                track[x][min_y] = 't'
+        for y in range(min_y, max_y + 1):
+            if fields[max_x][y] != _id:
+                track[max_x][y] = 't'
+            if fields[min_x][y] != _id:
+                track[min_x][y] = 't'
+        storage['track']=track
+        # print(storage['track'])
+
+    def is_safe(stat, storage):
+        '''
+        本函数中定义的变量：
+            1.  my_x,my_y:我纸卷的x坐标,我的纸卷的y坐标,为整型
+            2.  RoundTrack:圈地路径，使用别名，方便写程序
+        本函数中的辅助函数:
+            见辅助函数部分，个。辅助函数部分注释很详细。辅助函数部分，版本号小于1，则还不能够运行。
+        输入参数:
+            stat:
+            storage:
+        返回：
+            'left' or 'right' or 'straight'     转向指令，即  左转|右转|直行
+        version:
+            0.1 date:2018/6/5   sid 将整体的架构写出来，辅助函数中有一些没完成，根函数（即isSafe函数，在这里用根函数代称）也没有写一些算法的实现，只是将算法用伪代码给写好了，然后明天需要找大家确定函数接口。
+        '''
+
+        # 第一部分：声明本函数中定义的函数
+        my_x = stat['now']['me']['x']
+        my_y = stat['now']['me']['y']
+        # track_tag='t'
+        isOnTrack = storage['isOnTrack']
+        getRelativeDirection = storage['getRelativeDirection']
+        back_track = storage['back_track']
+        back_home = storage['back_home']
+        RoundTrack = storage['track']
+        if isOnTrack(my_x, my_y, RoundTrack):
+            #print('on track in {}'.format(stat['now']['turnleft'][0]))
+            RoundTrack[my_x][my_y] = 0
+            nextX1, nextY1 = storage['getNextPosition'](my_x, my_y, RoundTrack)
+
+            if isOnTrack(my_x - 1, my_y, RoundTrack):
+                nextX2, nextY2 = my_x - 1, my_y
+            elif isOnTrack(my_x, my_y + 1, RoundTrack):
+                nextX2, nextY2 = my_x, my_y + 1
+            elif isOnTrack(my_x + 1, my_y, RoundTrack):
+                nextX2, nextY2 = my_x + 1, my_y
+            elif isOnTrack(my_x, my_y - 1, RoundTrack):
+                nextX2, nextY2 = my_x, my_y - 1
+            else:
+                nextX2, nextY2 = False, False
+
+            if nextX1 == nextX2 and nextY1 == nextY2:
+                nextX, nextY = nextX1, nextY1
+            else:
+                path1, dis1 = storage['find_path'](stat, operate='site_to_home', myx=nextX1, myy=nextY1)
+                path2, dis2 = storage['find_path'](stat, operate='site_to_home', myx=nextX2, myy=nextY2)
+                if dis1 < dis2:
+                    nextX, nextY = nextX1, nextY1
+                else:
+                    nextX, nextY = nextX2, nextY2
+
+            if nextX is False:
+                storage['switch'] = True
+                # print("No Track")
+                return back_home(my_x, my_y, stat)
+            else:
+                #print("chose one way in {}".format(stat['now']['turnleft'][0]))
+                HomeTrack, disMe2Home = find_path(stat, operate='site_to_home', myx=nextX,myy=nextY,outputmark='t')
+                if disMe2Home>=(stat['size'][0]+stat['size'][1]-1):
+                    storage['switch']=True
+                    # print("No way to home!")
+                    return back_home(my_x, my_y, stat)
+                null, disHe2Me = find_path(stat, operate='enemy_to_path', pathstat=stat['now']['bands'],
+                                   pathmark=stat['now']['me']['id'])  # 敌人纸卷到我目前纸带的最短距离
+                null, disHe2MeBack = find_path(stat, operate='enemy_to_path', pathstat=HomeTrack, pathmark='t')
+                if disHe2MeBack>=(stat['size'][0]+stat['size'][1]-1):
+                    print("No path for he to my home track!")
+                    return back_home(my_x, my_y, stat)
+                if disMe2Home < disHe2Me - 3 and disMe2Home < disHe2MeBack-4:
+                    print("Next track!")
+                    return getRelativeDirection(my_x, my_y, nextX, nextY,stat['now']['me']['direction'])
+                else:
+                    print("Next Track not safe!")
+                    return back_home(my_x, my_y, stat)
+
+
+        elif stat['now']['fields'][my_x][my_y] == stat['now']['me']['id']:
+            storage['switch'] = False
+            # print("in my field in {}".format(stat['now']['turnleft'][0]))
+            if not (0 <= my_x < stat['size'][0] and 0 <= my_y - 1 < stat['size'][1] and stat['now']['fields'][my_x][
+                    my_y - 1] == stat['now']['me']['id'] and
+                        0 <= my_x + 1 < stat['size'][0] and 0 <= my_y < stat['size'][1] and
+                        stat['now']['fields'][my_x + 1][my_y] == stat['now']['me']['id'] and
+                        0 <= my_x < stat['size'][0] and 0 <= my_y + 1 < stat['size'][1] and stat['now']['fields'][my_x][
+                            my_y + 1] == stat['now']['me']['id'] and
+                        0 <= my_x - 1 < stat['size'][0] and 0 <= my_y < stat['size'][1] and
+                        stat['now']['fields'][my_x - 1][my_y] == stat['now']['me']['id']):
+                d = evaluate_d(stat)
+                print("\n\n\nd is{}\n\n\m ".format(d))
+                set_track(d, stat['now']['me']['id'], stat['now']['fields'])
+                storage['d_count'] = 3 * d
+                #print("set track in {} ".format(stat['now']['turnleft'][0]))
+            if abs(my_x-stat['now']['enemy']['x'])+abs(stat['now']['enemy']['y']-my_y)<7:
+                tmp=False
+            else:
+                tmp=back_track(my_x, my_y, stat)
+            if tmp:
+                print("from field to track in {}".format(stat['now']['turnleft'][0]))
+                return tmp
+            else:
+                print("battle in {}".format(stat['now']['turnleft'][0]))
+                if my_x==0:
+                    move_dict={1: abs(my_x - stat['now']['enemy']['x']) + abs(my_y - 1 - stat['now']['enemy']['y']),
+                         2: abs(my_x + 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         3: abs(my_x - stat['now']['enemy']['x']) + abs(my_y + 1 - stat['now']['enemy']['y'])}
+                elif my_x==stat['size'][0]-1:
+                    move_dict={0: abs(my_x - 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         1: abs(my_x - stat['now']['enemy']['x']) + abs(my_y - 1 - stat['now']['enemy']['y']),
+                         3: abs(my_x - stat['now']['enemy']['x']) + abs(my_y + 1 - stat['now']['enemy']['y'])}
+                elif my_y==0:
+                      move_dict={0: abs(my_x - 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         2: abs(my_x + 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         3: abs(my_x - stat['now']['enemy']['x']) + abs(my_y + 1 - stat['now']['enemy']['y'])}
+                elif my_y==stat['size'][1]-1:
+                    move_dict={0: abs(my_x - 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         1: abs(my_x - stat['now']['enemy']['x']) + abs(my_y - 1 - stat['now']['enemy']['y']),
+                         2: abs(my_x + 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),}
+                else:
+                    move_dict = {0: abs(my_x - 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         1: abs(my_x - stat['now']['enemy']['x']) + abs(my_y - 1 - stat['now']['enemy']['y']),
+                         2: abs(my_x + 1 - stat['now']['enemy']['x']) + abs(my_y - stat['now']['enemy']['y']),
+                         3: abs(my_x - stat['now']['enemy']['x']) + abs(my_y + 1 - stat['now']['enemy']['y'])}
+                if stat['now']['me']['direction'] in move_dict:
+                    move_dict.pop(stat['now']['me']['direction'])
+                print('pop')
+                count = len(move_dict)
+                while count > 0:
+                    #print('count=%d'%count)
+                    v_m, k_m = 200, 0
+                    for i in move_dict.keys():
+                        if move_dict[i] < v_m:
+                            k_m = i
+                    print('km=%d' % k_m)
+                    if k_m == 0 and (stat['now']['fields'][my_x - 1][my_y] == stat['now']['me']['id'] or count == 1):
+                        _dir = stat['now']['me']['direction'] - 2
+                        if _dir == 1:
+                            return 'left'
+                        elif _dir == -1:
+                            return 'right'
+                    elif k_m == 1 and (stat['now']['fields'][my_x][my_y - 1] == stat['now']['me']['id'] or count == 1):
+                        _dir = stat['now']['me']['direction'] - 3
+                        if _dir == -3:
+                            return 'left'
+                        elif _dir == -1:
+                            return 'right'
+                    elif k_m == 2 and (stat['now']['fields'][my_x + 1][my_y] == stat['now']['me']['id'] or count == 1):
+                        _dir = stat['now']['me']['direction']
+                        if _dir == 1:
+                            return 'left'
+                        elif _dir == 3:
+                            return 'right'
+                    elif k_m == 3 and (stat['now']['fields'][my_x][my_y + 1] == stat['now']['me']['id'] or count == 1):
+                        _dir = stat['now']['me']['direction'] - 1
+                        if _dir == 1:
+                            return 'left'
+                        elif _dir == -1:
+                            return 'right'
+                    print('pop %d' % k_m)
+                    move_dict.pop(k_m)
+                    count -= 1
+        else:
+            if storage['switch'] == True:
+                print("force to home in {}".format(stat['now']['turnleft'][0]))
+                return back_home(my_x, my_y, stat)
+            else:
+                dirc = back_track(my_x, my_y, stat)
+                if dirc:
+                    print('from none to track in {}'.format(stat['now']['turnleft'][0]))
+                    return dirc
+                else:
+                    print("not safe from none to filed in {}".format(stat['now']['turnleft'][0]))
+                    return back_home(my_x, my_y, stat)
+
+    def choiceDirection(myX, myY, path, storage):
+        nextX1, nextY1 = storage['getNextPosition'](myX, myY, path)
+        # print('in choice:nx,ny=%d,%d'%(nextX1,nextY1))
+        if isOnTrack(myX - 1, myY, path):
+            nextX2, nextY2 = myX - 1, myY
+        elif isOnTrack(myX, myY + 1, path):
+            nextX2, nextY2 = myX, myY + 1
+        elif isOnTrack(myX + 1, myY, path):
+            nextX2, nextY2 = myX + 1, myY
+        elif isOnTrack(myX, myY - 1, path):
+            nextX2, nextY2 = myX, myY - 1
+        else:
+            return False, False
+        if nextX1 == nextX2 and nextY1 == nextY2:
+            return nextX1, nextY2
+        else:
+            null, dis1 = storage['find_path'](stat, operate='site_to_home', myx=nextX1, myy=nextY1)
+            null, dis2 = storage['find_path'](stat, operate='site_to_home', myx=nextX2, myy=nextY2)
+            if dis1 < dis2:
+                return nextX1, nextY1
+            else:
+                return nextX2, nextY2
+
+    def isOnTrack(x, y, path):
+        return path is not None and 0 <= x < stat['size'][0] and 0 <= y < stat['size'][1] and path[x][y] == 't'
+
+    def isNowSafe(stat=stat, storage=storage):
+        BackTrack, disMe2Home = find_path(stat, operate='me_to_home', outputmark='t')  # 当前位置我纸卷到领地的最短距离
+        myid = stat['now']['me']['id']
+        null, disHe2Me = find_path(stat, operate='enemy_to_path', pathstat=stat['now']['bands'],
+                                   pathmark=myid)  # 敌人纸卷到我目前纸带的最短距离
+        null, disHe2MeBack = find_path(stat, operate='enemy_to_path', pathstat=BackTrack, pathmark='t')
+        if disHe2Me >= (stat['size'][0] + stat['size'][1] - 1):
+            return False
+        if disMe2Home < disHe2Me - 4 and disMe2Home < disHe2MeBack-4:
+            return True
+        else:
+            return False
+
+    def isNextStepSafe(stat=stat, storage=storage, nextX=None, nextY=None):
+        BackTrack, disMe2Home = find_path(stat, operate='site_to_home', myx=nextX, myy=nextY,
+                                          outputmark='t')  # 当前位置我纸卷到领地的最短距离
+        if disMe2Home==0:
+            print("next point in field")
+            return True
+        '''
+
+        '''
+        if disMe2Home >= (stat['size'][0] + stat['size'][1] - 1):
+            storage['switch'] = True
+            print("No path to home")
+            return False
+
+        myid = stat['now']['me']['id']
+        null, disHe2Me = find_path(stat, operate='enemy_to_path', pathstat=stat['now']['bands'],pathmark=myid)  # 敌人纸卷到我目前纸带的最短距离
+        if disHe2Me >= (stat['size'][0] + stat['size'][1] - 1):
+            if disMe2Home>((abs(nextX-stat['now']['enemy']['x'])+abs(nextY-stat['now']['enemy']['y']))-4):
+                print("No path for he 2 me! and distance not safe")
+                return False
+            else:
+                return True     
+        null, disHe2MeBack = find_path(stat, operate='enemy_to_path', pathstat=BackTrack, pathmark='t')
+        '''
+        if disHe2MeBack >= (stat['size'][0] + stat['size'][1] - 1):
+            print("NO path for he 2 me Back")
+            return False
+        '''
+        if disMe2Home < disHe2Me - 4 and disMe2Home < disHe2MeBack-5:
+            print("safe!")
+            return True
+        else:
+            print("distance not safe")
+            return False
+
+    # 找到路径上下一个位置的函数
+    def getNextPosition(x, y, path):
+        '''
+        辅助函数说明：根据当前位置和指定路径，返回下一个路径上下一个位置的横纵坐标。
+        传入函数说明：
+            x:  int
+            y:  int
+            path:   list[list[int]]
+        返回：
+            nextX,nextY int,int 下一个位置的横坐标，纵坐标
+            False,False bool,bool   如果不在路径上，或者找不到下一个路径，就返回False，False
+        version:
+            0.1：    date:2018/6/5   sid 建立架构，因为不知道path二维列表如何标记路径，还没有写具体的函数,还不能使用
+            1.0：    date:2018/6/7   sid 将代码补充完整，调用辅助函数isOnTrack.辅助函数的标记还是一个问题。同时增加找不到下一个位置的情况，就返回 False,False
+        '''
+        x = int(x)
+        y = int(y)
+        if isOnTrack(x, y - 1, path):
+            return x, y - 1
+        elif isOnTrack(x + 1, y, path):
+            return x + 1, y
+        elif isOnTrack(x, y + 1, path):
+            return x, y + 1
+        elif isOnTrack(x - 1, y, path):
+            return x - 1, y
+        else:
+            return False, False
+
+    def getRelativeDirection(myX, myY, nextX, nextY, dir):
+        '''
+        辅助函数：纸卷和相邻点的坐标传入，可以返回相对方向
+        传入参数：
+            myX:    int 当前的横坐标
+            myY:    int 当前的纵坐标
+            nextX:  int 下一步的横坐标
+            nextY:  int 下一步的纵坐标
+            stat
+        传出参数：
+            'left'
+            'right'
+            'straight'
+        version:
+            1.0:    date:2018/6/7   sid 完成函数
+        '''
+        moveX = nextX - myX
+        if moveX == 0:
+            if nextY - myY == 1:
+                relativedirection = 1 - dir
+            else:
+                relativedirection = 3 - dir
+        elif moveX == 1:
+            relativedirection = 0 - dir
+        else:
+            relativedirection = 2 - dir
+        #print('mx,my=%d,%d'%(myX,myY))
+        if relativedirection == 1:
+            return 'right'
+        elif relativedirection == 0:
+            return 'straight'
+        elif relativedirection == -1:
+            return 'left'
+        elif relativedirection == -3:
+            return 'right'
+        elif relativedirection == 3:
+            return 'left'
+        else:
+            if dir == 0:
+                nextY1 =myY-1
+                nextX1=myX
+                nextX2=myX
+                nextY2=myY+1
+            elif dir == 1:
+                nextX1=myX + 1
+                nextY1=myY
+                nextX2=myX-1
+                nextY2=myY
+            elif dir == 2:
+                nextY1=myY + 1
+                nextX1=myX
+                nextX2=myX
+                nextY2=myY-1
+            else:
+                nextX1=myX - 1
+                nextY1=myY
+                nextX2=myX+1
+                nextY2=myY
+
+            if 0<=nextX1<stat['size'][0] and 0<=nextY1<stat['size'][1]:
+                if 0<=nextX2<stat['size'][0] and 0<=nextY2<stat['size'][1]:
+                    null,dis1=find_path(stat,operate='site_to_home',myx=nextX1,myy=nextY1)
+                    null,dis2=find_path(stat,operate='site_to_home',myx=nextX2,myy=nextY2)
+                    if dis1<dis2:
+                        return 'left'
+                    else:
+                        return 'right'
+                else:
+                    return 'left'
+            else:
+                return 'right'
+
+    def back_track(myX, myY, stat):
+        #print("back track in {}".format(stat['now']['turnleft'][0]))
+        BackTrack, null = find_path(stat, operate='me_to_path', pathstat=storage['track'], pathmark='t',
+                                    outputmark='t')  # 当前到圈地路径的路
+        nextX, nextY = getNextPosition(myX, myY, BackTrack)
+        if isNextStepSafe(nextX=nextX, nextY=nextY):
+            #print(myX,myY,nextX,nextY)
+            return getRelativeDirection(myX, myY, nextX, nextY, stat['now']['me']['direction'])
+        else:
+            #print("NOT safe!!!\t{}".format(stat['now']['turnleft'][0]))
+            return False
+
+    def back_home(myX, myY, stat):
+
+        EscapeTrack, null = find_path(stat, operate='me_to_home', outputmark='t')
+        nextX, nextY = getNextPosition(myX, myY, EscapeTrack)
+        #print("back home in {}\t {}   {}  {}  {}".format(stat['now']['turnleft'][0],myX,myY,nextX,nextY))
+        return getRelativeDirection(myX, myY, nextX, nextY, stat['now']['me']['direction'])
+
+    def find_path(stat,operate='me_to_home',pathstat=None,pathmark=None,outputmark='mypath',myx=None,myy=None,myid='me',noband=False):
+        '''
+        寻路函数，寻找me/enemy到达各自领地，对方纸带，或给定路径的长度和路径
+        传入参数：
+            stat
+            operate     字符串     默认me_to_home，支持me_to_home, me_to_path, enemy_to_home, enemy_to_path, site_to_home, custom
+            pathstat    二维数组    默认None,自定义的路径信息，配合_to_path两operate使用
+            pathmark    字符串     默认None,自定义路径信息中的路径标记
+            outputmark  字符串     默认mypath,输出路径信息中的路径标记
+        返回：
+            outputpath   二维数组
+            distance    字符串     路径长度
+        版本：
+            6.0：    童培峰
+        存在问题：
+            出现同样distance的不同路径时如何寻找最优解
+        '''
+
+        if operate == 'me_to_home':
+            myid = stat['now']['me']['id']
+            myx = stat['now']['me']['x']
+            myy = stat['now']['me']['y']
+            statlist = stat['now']['fields']
+            fieldid = myid
+        elif operate == 'site_to_home':
+            myid = stat['now']['me']['id']
+            statlist = stat['now']['fields']
+            fieldid = myid
+        elif operate == 'enemy_to_home':
+            myid = stat['now']['enemy']['id']
+            myx = stat['now']['enemy']['x']
+            myy = stat['now']['enemy']['y']
+            statlist = stat['now']['fields']
+            fieldid = myid
+        elif operate == 'me_to_path':
+            myid = stat['now']['me']['id']
+            myx = stat['now']['me']['x']
+            myy = stat['now']['me']['y']
+            if not pathstat:
+                statlist = stat['now']['bands']
+                fieldid = stat['now']['enemy']['id']
+            else:
+                statlist = pathstat
+                fieldid = pathmark
+        elif operate == 'enemy_to_path':
+            noband = True
+            myid = stat['now']['enemy']['id']
+            myx = stat['now']['enemy']['x']
+            myy = stat['now']['enemy']['y']
+            if not pathstat:
+                statlist = stat['now']['bands']
+                fieldid = stat['now']['me']['id']
+            else:
+                statlist = pathstat
+                fieldid = pathmark
+        elif operate == 'custom':
+            statlist = pathstat
+            fieldid = pathmark
+
+        outputpath = []
+        col_length = stat['size'][0]
+        row_length = stat['size'][1]
+        distance = col_length + row_length
+        finalpath = []
+
+        for x in range(col_length):
+            outputpath.append([])
+            for y in range(row_length):
+                outputpath[x].append(None)
+                #判断是不是领地范围
+                if statlist[x][y] == fieldid:
+                    temp_distance = abs(x-myx) + abs(y-myy)#计算最短路径距离
+                    #判断距离是否更小
+                    if temp_distance <= distance:
+                        #分四象限考虑
+                        if x < myx:
+                            if y < myy:#第二象限
+                                #是不是边缘点
+                                if statlist[x+1][y] != fieldid and statlist[x][y+1] != fieldid:#角落
+                                    makesense,path1 = _findpath2(x,myx,y,myid,outputmark,noband)
+                                    makesense,path2 = _findpath1(y,myy,myx,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                                    else:
+                                        makesense,path1 = _findpath1(y,myy,x,myid,outputmark,noband)
+                                        makesense,path2 = _findpath2(x,myx,myy,myid,outputmark,noband,makesense)
+                                        if makesense:
+                                            distance = temp_distance
+                                            finalpath = path1 + path2
+                                elif statlist[x+1][y] != fieldid:#同上一
+                                    makesense,path1 = _findpath2(x,myx,y,myid,outputmark,noband)
+                                    makesense,path2 = _findpath1(y,myy,myx,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                                elif statlist[x][y+1] != fieldid:#同上二
+                                    makesense,path1 = _findpath1(y,myy,x,myid,outputmark,noband)
+                                    makesense,path2 = _findpath2(x,myx,myy,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                            elif y > myy:#第三象限
+                                if statlist[x+1][y] != fieldid and statlist[x][y-1] != fieldid:#角落
+                                    makesense,path1 = _findpath2(x,myx,y,myid,outputmark,noband)
+                                    makesense,path2 = _findpath1(myy+1,y+1,myx,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                                    else:
+                                        makesense,path1 = _findpath1(myy+1,y+1,x,myid,outputmark,noband)
+                                        makesense,path2 = _findpath2(x,myx,myy,myid,outputmark,noband,makesense)
+                                        if makesense:
+                                            distance = temp_distance
+                                            finalpath = path1 + path2
+                                elif statlist[x+1][y] != fieldid:#同上一
+                                    makesense,path1 = _findpath2(x,myx,y,myid,outputmark,noband)
+                                    makesense,path2 = _findpath1(myy+1,y+1,myx,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                                elif statlist[x][y-1] != fieldid:#同上二
+                                    makesense,path1 = _findpath1(myy+1,y+1,x,myid,outputmark,noband)
+                                    makesense,path2 = _findpath2(x,myx,myy,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                            else:
+                                if noband:
+                                    path = [(outputmark,i,y) for i in range(x,myx)]
+                                else:
+                                    path = [(outputmark,i,y) for i in range(x,myx) if stat['now']['bands'][i][y]!=myid]
+                                if len(path) == temp_distance:
+                                    distance = temp_distance
+                                    finalpath = path
+                        elif x > myx:
+                            if y < myy:#第一象限
+                                if statlist[x-1][y] != fieldid and statlist[x][y+1] != fieldid:#角落
+                                    makesense,path1 = _findpath2(myx+1,x+1,y,myid,outputmark,noband)
+                                    makesense,path2 = _findpath1(y,myy,myx,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                                    else:
+                                        makesense,path1 = _findpath1(y,myy,x,myid,outputmark,noband)
+                                        makesense,path2 = _findpath2(myx+1,x+1,myy,myid,outputmark,noband,makesense)
+                                        if makesense:
+                                            distance = temp_distance
+                                            finalpath = path1 + path2
+                                elif statlist[x-1][y] != fieldid:
+                                    makesense,path1 = _findpath2(myx+1,x+1,y,myid,outputmark,noband)
+                                    makesense,path2 = _findpath1(y,myy,myx,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                                elif statlist[x][y+1] != fieldid:
+                                    makesense,path1 = _findpath1(y,myy,x,myid,outputmark,noband)
+                                    makesense,path2 = _findpath2(myx+1,x+1,myy,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                            elif y > myy:#第四象限
+                                if statlist[x-1][y] != fieldid and statlist[x][y-1] != fieldid:#角落
+                                    makesense,path1 = _findpath2(myx+1,x+1,y,myid,outputmark,noband)
+                                    makesense,path2 = _findpath1(myy+1,y+1,myx,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                                    else:
+                                        makesense,path1 = _findpath1(myy+1,y+1,x,myid,outputmark,noband)
+                                        makesense,path2 = _findpath2(myx+1,x+1,myy,myid,outputmark,noband,makesense)
+                                        if makesense:
+                                            distance = temp_distance
+                                            finalpath = path1 + path2
+                                elif statlist[x-1][y] != fieldid:
+                                    makesense,path1 = _findpath2(myx+1,x+1,y,myid,outputmark,noband)
+                                    makesense,path2 = _findpath1(myy+1,y+1,myx,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                                elif statlist[x][y-1] != fieldid:
+                                    makesense,path1 = _findpath1(myy+1,y+1,x,myid,outputmark,noband)
+                                    makesense,path2 = _findpath2(myx+1,x+1,myy,myid,outputmark,noband,makesense)
+                                    if makesense:
+                                        distance = temp_distance
+                                        finalpath = path1 + path2
+                            else:
+                                if noband:
+                                    path = [(outputmark,i,y) for i in range(myx+1,x+1)]
+                                else:
+                                    path = [(outputmark,i,y) for i in range(myx+1,x+1) if stat['now']['bands'][i][y]!=myid]
+                                if len(path) == temp_distance:
+                                    distance = temp_distance
+                                    finalpath = path
+                        else:
+                            if y < myy:
+                                if noband:
+                                    path = [(outputmark,myx,j) for j in range(y,myy)]
+                                else:
+                                    path = [(outputmark,myx,j) for j in range(y,myy) if stat['now']['bands'][myx][j]!=myid]
+                                if len(path) == temp_distance:
+                                    distance = temp_distance
+                                    finalpath = path
+                            elif y > myy:
+                                if noband:
+                                    path = [(outputmark,myx,j) for j in range(myy+1,y+1)]
+                                else:
+                                    path = [(outputmark,myx,j) for j in range(myy+1,y+1) if stat['now']['bands'][myx][j]!=myid]
+                                if len(path) == temp_distance:
+                                    distance = temp_distance
+                                    finalpath = path
+                            else:
+                                distance = 0
+                                finalpath = []
+
+        if distance == col_length+row_length and operate != 'custom':
+            correctoutputpath, correctdistance, nextx, nexty, success=path_not_find(statlist,fieldid,outputmark,myx,myy,myid,noband)
+            if success:
+                correctoutputpath[nextx][nexty] = outputmark
+                if correctdistance != stat['size'][0]+stat['size'][1]:
+                    return correctoutputpath, correctdistance+1
+                else:
+                    return correctoutputpath, correctdistance
+            else:
+                return outputpath, distance
+        else:
+            for item in finalpath:
+                outputpath[item[1]][item[2]]=item[0]
+            return outputpath, distance
+
+    def path_not_find(pathstat,pathmark,outputmark,x,y,id,noband):
+        success = False
+        index = [1,-1]
+        p=pathstat
+        d=stat['size'][0]+stat['size'][1]
+        nextx = x
+        nexty = y
+        for i in index:
+            try:
+                if stat['now']['bands'][abs(x+i)][abs(y)]!=id:
+                    tempp,tempd = find_path(stat,operate='custom',pathstat=pathstat,pathmark=pathmark,outputmark=outputmark,myx=abs(x+i),myy=abs(y),myid=id,noband=noband)
+                    if tempd <= d:
+                        success = True
+                        p = tempp
+                        d = tempd
+                        nextx = x+i
+                        nexty = y
+            except IndexError:
+                pass
+        for i in index:
+            try:
+                if stat['now']['bands'][abs(x)][abs(y+i)]!=id:
+                    tempp,tempd = find_path(stat,operate='custom',pathstat=pathstat,pathmark=pathmark,outputmark=outputmark,myx=abs(x),myy=abs(y+i),myid=id,noband=noband)
+                    if tempd <= d:
+                        success = True
+                        p = tempp
+                        d = tempd
+                        nextx = x
+                        nexty = y+i
+            except IndexError:
+                pass
+        return p, d, nextx, nexty, success
+
+    def _findpath1(d1,d2,constant,myid,outputmark,noband,makesense = True):
+        temppath = []
+        for i in range(d1,d2):
+            if noband:
+                temppath.append((outputmark,constant,i))
+            elif stat['now']['bands'][constant][i]!=myid:
+                temppath.append((outputmark,constant,i))
+            else:
+                makesense = False
+                break
+        return makesense, temppath
+
+    def _findpath2(d1,d2,constant,myid,outputmark,noband,makesense = True):
+        temppath = []
+        for i in range(d1,d2):
+            if noband:
+                temppath.append((outputmark,i,constant))
+            elif stat['now']['bands'][i][constant]!=myid:
+                temppath.append((outputmark,i,constant))
+            else:
+                makesense = False
+                break
+        return makesense, temppath
+
+    storage['set_track'] = set_track
+    storage['find_path'] = find_path
+    storage['path_not_find'] = path_not_find
+    storage['is_safe'] = is_safe
+    storage['attack'] = attack
+    storage['evaluate_d'] = evaluate_d
+    storage['isOnTrack'] = isOnTrack
+    storage['isNowSafe'] = isNowSafe
+    storage['isNextStepSafe'] = isNextStepSafe
+    storage['getNextPosition'] = getNextPosition
+    storage['getRelativeDirection'] = getRelativeDirection
+    storage['back_track'] = back_track
+    storage['back_home'] = back_home
+    storage['beginning'] = beginning
+    storage['choiceDirection'] = choiceDirection
